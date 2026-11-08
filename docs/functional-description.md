@@ -35,7 +35,7 @@ From each transcript the tool reads:
 - The working directory: the first `cwd` field of the file. Two working directories can give the same slug, so the tool never derives the directory from the slug.
 - The title. A `custom-title` record (a rename) wins over an `ai-title` record (the generated title), and the last record of each kind wins. The tool reads the last 64 KiB first. If the tail has no `custom-title` record and the file contains the bytes `"custom-title"`, it reads the whole file. Claude Code writes the generated title again through the file, so an early rename can sit far from the tail.
 - The prompts and the answers. A prompt is a `user` record that is not `isMeta` and that holds a text block. The tool removes what the client adds around the typing: IDE selection blocks, paste markers, command and hook records, system reminders, interruption notes and continuation summaries. The answer of an exchange is the last assistant text before the next prompt.
-- The usage of each call, from `message.usage`. A call counts once, on the pair (`requestId`, `message.id`), because a resume or a compaction writes the same records again.
+- The usage of each call, from `message.usage`. A call counts once, on the pair (`requestId`, `message.id`), because a resume or a compaction writes the same records again. The thinking tokens come from `output_tokens_details.thinking_tokens`. `cache_creation_input_tokens` is the total of the cache writes, and `cache_creation` splits it by TTL. An interrupted turn can carry a split with a total of zero, so the total decides.
 - A `continued-in` record at the end of the file, which names the session that went on from this one. See "Parked conversations".
 
 A session can own a sidecar directory `<id>/` beside its transcript. It holds:
@@ -49,13 +49,13 @@ Two more directories hold parts of a session, keyed by its id: `~/.claude/file-h
 
 ### The process registry
 
-Claude Code writes `~/.claude/sessions/<pid>.json` for each running session, the VS Code extension included. The tool reads `sessionId`, `pid`, `procStart`, `pidDomain`, `cwd`, `name`, `entrypoint`, `kind`, `status` and `parkedJobId`.
+Claude Code writes `~/.claude/sessions/<pid>.json` for each running session, the VS Code extension included. The tool reads `sessionId`, `pid`, `procStart`, `pidDomain`, `cwd`, `name`, `entrypoint`, `kind`, `status` and `parkedJobId`. The `kind` of a background session is `bg`, and that of the others is `interactive`.
 
 A registry file outlives its process. An entry is live only if all of these hold:
 
-- If the entry has a `pidDomain`, it names the pid namespace of the tool.
+- If the entry has a `pidDomain`, it names the pid namespace of the tool. Its form is `linux:<machine id>:pid:[<inode>]`: the content of `/etc/machine-id`, then the target of the link `/proc/self/ns/pid`.
 - `/proc/<pid>` exists.
-- The start time in `/proc/<pid>/stat` equals `procStart`, so a reused pid does not pass for the session.
+- The start time in `/proc/<pid>/stat` equals `procStart`, so a reused pid does not pass for the session. It is field 22 of that file, in clock ticks, and `procStart` holds it as a string.
 
 From a sandbox or a container, the pids of the registry are not visible. The tool then treats the registry as unreadable. An entry written from the namespace of the tool proves that the registry is readable, and so does a pid that is seen alive. If the registry is unreadable, a transcript changed less than two minutes ago counts as possibly open.
 
@@ -63,12 +63,14 @@ For a live session the tool also finds the program that shows it. If the process
 
 ### The status line payload
 
-Claude Code passes a JSON payload on standard input to the status line command. A status line command saves it as `<id>.raw.json` in a state directory, one file per session. The default directory is `~/.local/state/herdtop`.
+Claude Code passes a JSON payload on standard input to the status line command. A status line command saves it as `<id>.raw.json` in a state directory, one file per session. The default directory is `$XDG_STATE_HOME/claude-tmux`, else `~/.local/state/claude-tmux`: the status line hook of Icekamonday/herdr saves the payload there. `HERDTOP_PAYLOAD_DIR` moves it.
 
 The tool reads two parts of it:
 
 - `rate_limits.five_hour` and `rate_limits.seven_day`, each with `used_percentage` and `resets_at`. They belong to the account, so the newest file answers for every session. If `resets_at` has passed, the tool does not show that window.
 - `prompt_cache`, with `ttl` (`5m` or `1h`), `expires_at` and `recache_tokens_if_cold`. It belongs to the session. If `expires_at` is older than the last call of the transcript, the tool keeps only the TTL.
+
+`resets_at` and `expires_at` are Unix times in seconds, and `used_percentage` is a whole number.
 
 If the status line saves nothing, the tool shows no gauges, and the cache state comes from the transcript alone.
 
