@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The repository is public: a credential or an internal name must reach
+  # neither a file nor a commit.
+  names:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the scan reads the message, the author and the committer of every
+          # commit, so it needs the whole history
+          fetch-depth: 0
+      - run: scripts/no-secrets.sh --log HEAD
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # A release of ruff can change its default rules, and the job then fails
+      # with no change of ours. The pin moves by a commit.
+      - run: pip install --quiet ruff==0.17.1
+      - run: ruff check .
+
+  # 3.11 is the floor of requires-python. The installed entry point is run
+  # once, so that a packaging fault fails here and not at a user's install.
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install --quiet . pytest==9.1.1
+      - run: herdtop --version
+      - run: pytest -q
+
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pytest==9.1.1 coverage==7.17.2
+      - run: |
+          coverage run -m pytest -q
+          coverage report
