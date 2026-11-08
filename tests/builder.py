@@ -141,3 +141,19 @@ def payload(home: Path, sid: str, *, ttl: str = "5m", expires_at: float = NOW,
     if mtime is not None:
         os.utime(path, (mtime, mtime))
     return path
+
+
+def session(title: str | None = "a title", cwd: str | None = "/work/a", *,
+            named: bool = True, answered: float = NOW, sid: str | None = None,
+            calls: list | None = None, **fields):
+    """A session built in memory, for the tests of what shows it."""
+    from herdtop.model import Digest, Session, Tally
+
+    sid = sid or str(uuidlib.uuid4())
+    digest = Digest(id=sid, cwd=cwd, title=title, title_set=named,
+                    first_prompt="the first prompt", last_answer=answered,
+                    tally=Tally.of(calls or []))
+    path = Path("/store") / slug(cwd or "/x") / f"{sid}.jsonl"
+    return Session(kind="claude", path=path, project=path.parent.name,
+                   mtime=answered, size=fields.pop("size", 1000), digest=digest,
+                   **fields)
