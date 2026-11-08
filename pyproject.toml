@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "herdtop"
+dynamic = ["version"]
+description = "A terminal browser of the Claude Code sessions of one machine"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = []
+classifiers = [
+    "Environment :: Console :: Curses",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Source = "https://github.com/Icekamonday/herdtop"
+
+[project.scripts]
+herdtop = "herdtop.cli:main"
+
+[tool.hatch.version]
+path = "src/herdtop/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/herdtop"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["B", "I", "UP"]
+
+[tool.coverage.run]
+source = ["herdtop"]
+branch = true
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
