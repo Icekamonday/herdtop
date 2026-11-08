@@ -230,6 +230,27 @@ class Session:
     def open(self) -> bool:
         return self.live is not None or self.maybe_open
 
+    @property
+    def context(self) -> int:
+        """What the next call sends again. A fresh payload knows what a cold
+        cache would write back, which the last call does not show."""
+        if self.cache and self.cache.recache_tokens is not None:
+            return self.cache.recache_tokens
+        return self.tally.last_context
+
+    @property
+    def cache_ends(self) -> float | None:
+        """When the cache expires, or None for a session with no call. With
+        no TTL known, the cache reads as cold rather than warm."""
+        last = self.tally.last_call
+        if last is None:
+            return None
+        ttl = (self.cache and self.cache.ttl) or self.tally.last_ttl or "5m"
+        ends = last + (3600 if ttl == "1h" else 300)
+        if self.cache and self.cache.expires_at and self.cache.expires_at > ends:
+            ends = self.cache.expires_at
+        return ends
+
 
 class Reader(Protocol):
     """The sources of one kind of agent."""
