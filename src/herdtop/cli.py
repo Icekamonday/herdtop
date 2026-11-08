@@ -6,7 +6,7 @@ import shutil
 import sys
 import time
 
-from herdtop import __version__, changes, render, store, view
+from herdtop import __version__, changes, render, store, tui, view
 from herdtop.readers.claude import ClaudeReader
 
 
@@ -34,6 +34,9 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--filter", default="",
                         help="keep the sessions whose title or directory "
                              "matches every word")
+    parser.add_argument("--no-color", action="store_true",
+                        help="show glyphs in place of colours "
+                             "(NO_COLOR does the same)")
     return parser.parse_args(argv)
 
 
@@ -48,12 +51,23 @@ def main(argv: list[str] | None = None) -> int:
         print(changes.text())
         return 0
     state = state_of(args)
+
+    def load() -> store.Store:
+        return store.load([ClaudeReader()], time.time())
+
+    # Without a terminal there is no screen to draw: print the dump.
+    if not (args.once or sys.stdout.isatty()):
+        args.once = True
+    if not args.once:
+        color = not (args.no_color or os.environ.get("NO_COLOR"))
+        tui.run(tui.App(load, state), color)
+        return 0
     size = args.width
     if size is None:
         size = (shutil.get_terminal_size((160, 24)).columns
                 if sys.stdout.isatty() else 160)
     now = time.time()
-    sessions = store.load([ClaudeReader()], now)
+    sessions = load()
     state.all_open = True
     rows = view.rows(sessions.sessions, state)
     try:
